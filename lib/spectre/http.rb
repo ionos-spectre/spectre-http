@@ -172,7 +172,8 @@ module Spectre
         req = DEFAULT_HTTP_CONFIG.clone
 
         if @@config.key? name
-          req.deep_merge! @@config[name].deep_clone
+          deep_merge(req, Marshal.load(Marshal.dump(@@config[name])))
+
           raise SpectreHttpError.new("No `base_url' set for HTTP client '#{name}'. Check your HTTP config in your environment.") unless req['base_url']
         else
           req['base_url'] = name
@@ -202,6 +203,13 @@ module Spectre
       end
 
       private
+
+      def deep_merge(first, second)
+        return unless second.is_a?(Hash)
+
+        merger = proc { |_key, v1, v2| Hash === v1 && Hash === v2 ? v1.merge!(v2, &merger) : v2 }
+        first.merge!(second, &merger)
+      end
 
       def try_format_json str, pretty: false
         return str unless str or str.empty?
