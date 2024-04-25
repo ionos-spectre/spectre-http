@@ -370,3 +370,9 @@ module Spectre
     end
   end
 end
+
+%i{http https request response}.each do |method|
+  define_method(method) do |*args, &block|
+    Spectre::Http.send(method, *args, &block)
+  end
+end
