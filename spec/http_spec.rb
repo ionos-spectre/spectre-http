@@ -10,11 +10,11 @@ module Spectre
         'retries' => 3,
         'content_type' => 'application/json',
         'headers' => [
-          ['header1', 'value1'],
+          ['header1', 'value1']
         ],
         'query' => [
           ['key1', 'value1'],
-          ['key2', 'value2'],
+          ['key2', 'value2']
         ],
       },
     },
@@ -69,7 +69,7 @@ RSpec.describe 'HTTP' do
       param 'key1', 'value1'
       param 'key2', 'value2'
       json({
-        "message": "Hello Spectre!",
+        message: 'Hello Spectre!',
       })
       ensure_success!
       # body 'foo=bar'

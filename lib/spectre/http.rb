@@ -23,7 +23,7 @@ module Spectre
       'retries' => 0,
     }
 
-    class SpectreHttpError < Exception
+    class SpectreHttpError < StandardError
     end
 
     class SpectreHttpRequest
@@ -112,9 +112,9 @@ module Spectre
         @__req.to_s
       end
 
-      alias_method :auth, :authenticate
-      alias_method :cert, :certificate
-      alias_method :media_type, :content_type
+      alias auth authenticate
+      alias cert certificate
+      alias media_type content_type
     end
 
     class SpectreHttpHeader
@@ -143,11 +143,11 @@ module Spectre
         @headers = SpectreHttpHeader.new(net_res.to_hash)
         @json = nil
 
-        unless @body.nil?
-          begin
-            @json = JSON.parse(@body, object_class: OpenStruct)
-          rescue JSON::ParserError
-          end
+        return if @body.nil?
+
+        begin
+          @json = JSON.parse(@body, object_class: OpenStruct)
+        rescue JSON::ParserError
         end
       end
 
@@ -163,7 +163,7 @@ module Spectre
       @@config = defined?(Spectre::CONFIG) ? Spectre::CONFIG['http'] || {} : {}
 
       def logger
-        @@logger ||= defined?(Spectre.logger) ? Spectre.logger : Logger.new(STDOUT)
+        @@logger ||= defined?(Spectre.logger) ? Spectre.logger : Logger.new($stdout)
       end
 
       def https(name, &)
@@ -176,7 +176,9 @@ module Spectre
         if @@config.key? name
           deep_merge(req, Marshal.load(Marshal.dump(@@config[name])))
 
-          raise SpectreHttpError.new("No `base_url' set for HTTP client '#{name}'. Check your HTTP config in your environment.") unless req['base_url']
+          unless req['base_url']
+            raise SpectreHttpError, "No `base_url' set for HTTP client '#{name}'. Check your HTTP config in your environment."
+          end
         else
           req['base_url'] = name
         end
@@ -209,7 +211,7 @@ module Spectre
       def deep_merge(first, second)
         return unless second.is_a?(Hash)
 
-        merger = proc { |_key, v1, v2| Hash === v1 && Hash === v2 ? v1.merge!(v2, &merger) : v2 }
+        merger = proc { |_key, v1, v2| v1.is_a?(Hash) && v2.is_a?(Hash) ? v1.merge!(v2, &merger) : v2 }
         first.merge!(second, &merger)
       end
 
@@ -220,12 +222,8 @@ module Spectre
           json = JSON.parse(str)
           json.obfuscate!(DEFAULT_SECURE_KEYS) unless @debug
 
-          if pretty
-            str = JSON.pretty_generate(json)
-          else
-            str = JSON.dump(json)
-          end
-        rescue
+          str = pretty ? JSON.pretty_generate(json) : JSON.dump(json)
+        rescue StandardError
           # do nothing
         end
 
@@ -239,8 +237,8 @@ module Spectre
       def header_to_s headers
         s = ''
         headers.each_header.each do |header, value|
-          value = '*****' if secure?(header) and not @debug
-          s += "#{header.to_s.ljust(30, '.')}: #{value.to_s}\n"
+          value = '*****' if secure?(header) and !@debug
+          s += "#{header.to_s.ljust(30, '.')}: #{value}\n"
         end
         s
       end
@@ -253,22 +251,20 @@ module Spectre
         scheme = req['use_ssl'] ? 'https' : 'http'
         base_url = req['base_url']
 
-        unless base_url.match /http(?:s)?:\/\//
-          base_url = scheme + '://' + base_url
-        end
+        base_url = scheme + '://' + base_url unless base_url.match %r{http(?:s)?://}
 
         if req['path']
-          base_url = base_url + '/' unless base_url.end_with? '/'
+          base_url += '/' unless base_url.end_with? '/'
           base_url += req['path']
         end
 
         uri = URI(base_url)
 
-        raise SpectreHttpError.new("'#{uri}' is not a valid uri") unless uri.host
+        raise SpectreHttpError, "'#{uri}' is not a valid uri" unless uri.host
 
         # Build query parameters
 
-        uri.query = URI.encode_www_form(req['query']) unless not req['query'] or req['query'].empty?
+        uri.query = URI.encode_www_form(req['query']) unless !(req['query']) or req['query'].empty?
 
         # Create HTTP client
 
@@ -280,7 +276,7 @@ module Spectre
           net_http.use_ssl = true
 
           if req['cert']
-            raise SpectreHttpError.new("Certificate '#{req['cert']}' does not exist") unless File.exist? req['cert']
+            raise SpectreHttpError, "Certificate '#{req['cert']}' does not exist" unless File.exist? req['cert']
 
             net_http.verify_mode = OpenSSL::SSL::VERIFY_PEER
             net_http.ca_file = req['cert']
@@ -293,15 +289,13 @@ module Spectre
 
         net_req = Net::HTTPGenericRequest.new(req['method'], true, true, uri)
         net_req.body = req['body']
-        net_req.content_type = req['content_type'] if req['content_type'] and not req['content_type'].empty?
+        net_req.content_type = req['content_type'] if req['content_type'] and !req['content_type'].empty?
 
-        if req['headers']
-          req['headers'].each do |header|
-            net_req[header[0]] = header[1]
-          end
+        req['headers']&.each do |header|
+          net_req[header[0]] = header[1]
         end
 
-        req_id = SecureRandom.uuid()[0..5]
+        req_id = SecureRandom.uuid[0..5]
 
         # Run HTTP modules
 
@@ -315,11 +309,7 @@ module Spectre
         req_log += header_to_s(net_req)
 
         unless req['body'].nil? or req['body'].empty?
-          unless req['no_log']
-            req_log += try_format_json(req['body'], pretty: true)
-          else
-            req_log += '[...]'
-          end
+          req_log += req['no_log'] ? '[...]' : try_format_json(req['body'], pretty: true)
         end
 
         logger.info(req_log)
@@ -331,9 +321,9 @@ module Spectre
         begin
           net_res = net_http.request(net_req)
         rescue SocketError => e
-          raise SpectreHttpError.new("The request '#{req['method']} #{uri}' failed. Please check if the given URL '#{uri}' is valid and available or a corresponding HTTP config in the environment file exists. See log for more details. Original.\nOriginal error was: #{e.message}")
+          raise SpectreHttpError, "The request '#{req['method']} #{uri}' failed. Please check if the given URL '#{uri}' is valid and available or a corresponding HTTP config in the environment file exists. See log for more details. Original.\nOriginal error was: #{e.message}"
         rescue Net::ReadTimeout
-          raise SpectreHttpError.new("HTTP timeout of #{net_http.read_timeout}s exceeded")
+          raise SpectreHttpError, "HTTP timeout of #{net_http.read_timeout}s exceeded"
         end
 
         end_time = Time.now
@@ -353,17 +343,13 @@ module Spectre
         res_log += header_to_s(net_res)
 
         unless net_res.body.nil? or net_res.body.empty?
-          unless req['no_log']
-            res_log += try_format_json(net_res.body, pretty: true)
-          else
-            res_log += '[...]'
-          end
+          res_log += req['no_log'] ? '[...]' : try_format_json(net_res.body, pretty: true)
         end
 
         logger.info(res_log)
 
         if req['ensure_success'] and net_res.code.to_i >= 400
-          fail "Response code of #{req_id} did not indicate success: #{net_res.code} #{net_res.message}"
+          raise "Response code of #{req_id} did not indicate success: #{net_res.code} #{net_res.message}"
         end
 
         Thread.current.thread_variable_set('request', OpenStruct.new(req).freeze)
@@ -373,7 +359,7 @@ module Spectre
   end
 end
 
-%i{http https request response}.each do |method|
+%i[http https request response].each do |method|
   Kernel.define_method(method) do |*args, &block|
     Spectre::Http.send(method, *args, &block)
   end
