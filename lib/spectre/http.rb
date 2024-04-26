@@ -71,7 +71,6 @@ module Spectre
       end
 
       def json data
-        data = data.to_h if data.is_a? OpenStruct
         body JSON.pretty_generate(data)
 
         content_type('application/json') unless @__req['content_type']
@@ -161,7 +160,7 @@ module Spectre
     DEFAULT_SECURE_KEYS = ['password', 'pass', 'token', 'secret', 'key', 'auth', 'authorization', 'cookie', 'session', 'csrf', 'jwt', 'bearer']
 
     class << self
-      @@config = defined?(Spectre::CONFIG) ? Spectre::CONFIG['http'] : {}
+      @@config = defined?(Spectre::CONFIG) ? Spectre::CONFIG['http'] || {} : {}
 
       def logger
         @@logger ||= defined?(Spectre.logger) ? Spectre.logger : Logger.new(STDOUT)
@@ -336,7 +335,7 @@ module Spectre
         rescue Net::ReadTimeout
           raise SpectreHttpError.new("HTTP timeout of #{net_http.read_timeout}s exceeded")
         end
- 
+
         end_time = Time.now
 
         req['started_at'] = start_time
