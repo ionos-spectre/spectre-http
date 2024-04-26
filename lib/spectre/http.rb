@@ -162,7 +162,10 @@ module Spectre
 
     class << self
       @@config = defined?(Spectre::CONFIG) ? Spectre::CONFIG['http'] : {}
-      @@logger = defined?(Spectre.logger) ? Spectre.logger : Logger.new(STDOUT)
+
+      def logger
+        @@logger ||= defined?(Spectre.logger) ? Spectre.logger : Logger.new(STDOUT)
+      end
 
       def https(name, &)
         http(name, secure: true, &)
@@ -320,7 +323,7 @@ module Spectre
           end
         end
 
-        @@logger.info(req_log)
+        logger.info(req_log)
 
         # Request
 
@@ -333,7 +336,7 @@ module Spectre
         rescue Net::ReadTimeout
           raise SpectreHttpError.new("HTTP timeout of #{net_http.read_timeout}s exceeded")
         end
-
+ 
         end_time = Time.now
 
         req['started_at'] = start_time
@@ -358,7 +361,7 @@ module Spectre
           end
         end
 
-        @@logger.info(res_log)
+        logger.info(res_log)
 
         if req['ensure_success'] and net_res.code.to_i >= 400
           fail "Response code of #{req_id} did not indicate success: #{net_res.code} #{net_res.message}"
