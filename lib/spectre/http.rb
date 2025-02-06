@@ -148,6 +148,7 @@ module Spectre
         begin
           @json = JSON.parse(@body, object_class: OpenStruct)
         rescue JSON::ParserError
+          # Shhhhh... it's ok. Do nothing here
         end
       end
 
@@ -157,27 +158,33 @@ module Spectre
     end
 
     MODULES = []
-    DEFAULT_SECURE_KEYS = ['password', 'pass', 'token', 'secret', 'key', 'auth', 'authorization', 'cookie', 'session', 'csrf', 'jwt', 'bearer']
+    DEFAULT_SECURE_KEYS = ['password', 'pass', 'token', 'secret', 'key', 'auth',
+                           'authorization', 'cookie', 'session', 'csrf', 'jwt', 'bearer']
 
     class << self
       @@config = defined?(Spectre::CONFIG) ? Spectre::CONFIG['http'] || {} : {}
 
       def logger
-        @@logger ||= defined?(Spectre.logger) ? Spectre.logger : Logger.new($stdout)
+        @@logger ||= if defined?(Spectre::Logger)
+                       Spectre::Logger.new(Spectre::CONFIG, progname: 'spectre/http')
+                     else
+                       Logger.new($stdout, progname: 'spectre/http')
+                     end
       end
 
       def https(name, &)
         http(name, secure: true, &)
       end
 
-      def http name, secure: false, &block
+      def http(name, secure: false, &)
         req = DEFAULT_HTTP_CONFIG.clone
 
         if @@config.key? name
           deep_merge(req, Marshal.load(Marshal.dump(@@config[name])))
 
           unless req['base_url']
-            raise SpectreHttpError, "No `base_url' set for HTTP client '#{name}'. Check your HTTP config in your environment."
+            raise SpectreHttpError, "No `base_url' set for HTTP client '#{name}'. " \
+                                    'Check your HTTP config in your environment.'
           end
         else
           req['base_url'] = name
@@ -185,7 +192,7 @@ module Spectre
 
         req['use_ssl'] = secure unless secure.nil?
 
-        SpectreHttpRequest.new(req).instance_eval(&block) if block_given?
+        SpectreHttpRequest.new(req).instance_eval(&) if block_given?
 
         invoke(req)
       end
@@ -321,7 +328,10 @@ module Spectre
         begin
           net_res = net_http.request(net_req)
         rescue SocketError => e
-          raise SpectreHttpError, "The request '#{req['method']} #{uri}' failed. Please check if the given URL '#{uri}' is valid and available or a corresponding HTTP config in the environment file exists. See log for more details. Original.\nOriginal error was: #{e.message}"
+          raise SpectreHttpError, "The request '#{req['method']} #{uri}' failed: #{e.message}\n" \
+                                  "Please check if the given URL '#{uri}' is valid " \
+                                  'and available or a corresponding HTTP config in ' \
+                                  'the environment file exists. See log for more details. '
         rescue Net::ReadTimeout
           raise SpectreHttpError, "HTTP timeout of #{net_http.read_timeout}s exceeded"
         end

@@ -1,5 +1,10 @@
+require 'stringio'
+require 'logger'
+
+# Mock the Spectre modules
 module Spectre
   CONFIG = {
+    'log_file' => StringIO.new,
     'http' => {
       'example' => {
         'base_url' => 'some-rest-api.io',
@@ -19,6 +24,12 @@ module Spectre
       },
     },
   }
+
+  class Logger < ::Logger
+    def initialize(config, **)
+      super(config['log_file'], **)
+    end
+  end
 end
 
 require_relative '../lib/spectre/http'
@@ -85,5 +96,21 @@ RSpec.describe 'HTTP' do
     end
 
     expect(Spectre::Http.response.code).to eq 200
+
+    log = Spectre::CONFIG['log_file']
+    log.rewind
+    lines = log.readlines
+
+    expect(lines[0]).to match('I, \[.*\]  INFO -- spectre/http: \[>\] [a-z0-9]{6} POST ')
+    expect(lines[0]).to include('https://some-rest-api.io/some-resource?key1=value1&key2=value2')
+    expect(lines[1]).to eq("header1.......................: value1\n")
+    expect(lines[2]).to eq("{\n")
+    expect(lines[3]).to eq("  \"message\": \"Hello Spectre!\"\n")
+    expect(lines[4]).to eq("}\n")
+    expect(lines[5]).to match('I, \[.*\]  INFO -- spectre/http: \[<\] [a-z0-9]{6} 200 Ok \([\d\.\-e]+s\)')
+    expect(lines[6]).to eq("some-header...................: some-value\n")
+    expect(lines[7]).to eq("{\n")
+    expect(lines[8]).to eq("  \"result\": \"Hello RSpec!\"\n")
+    expect(lines[9]).to eq("}\n")
   end
 end
