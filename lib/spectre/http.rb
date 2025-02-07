@@ -27,6 +27,8 @@ module Spectre
     end
 
     class SpectreHttpRequest
+      include Spectre::Delegate if defined? Spectre::Delegate
+
       class Headers
         CONTENT_TYPE = 'Content-Type'
         UNIQUE_HEADERS = [CONTENT_TYPE].freeze
