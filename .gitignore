@@ -3,6 +3,7 @@
 **/*.log
 tmp/
 pkg/
+doc/
 temp/
 vendor/
 Gemfile.lock
