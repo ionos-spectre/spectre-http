@@ -9,11 +9,14 @@ module Spectre
       'example' => {
         'base_url' => 'some-rest-api.io',
         'method' => 'POST',
-        'path' => 'some-resource',
+        'path' => '{some_route_param}/{another_param}/some-resource',
         'auth' => 'basic_auth',
         'timeout' => 100,
         'retries' => 3,
         'content_type' => 'application/json',
+        'params' => {
+          'some_route_param' => 'route-value',
+        },
         'headers' => [
           ['header1', 'value1']
         ],
@@ -78,7 +81,7 @@ RSpec.describe 'HTTP' do
       content_type 'application/json'
       header 'header1', 'value1'
       param 'key1', 'value1'
-      param 'key2', 'value2'
+      param key2: 'value2'
       json({
         message: 'Hello Spectre!',
       })
@@ -92,7 +95,7 @@ RSpec.describe 'HTTP' do
     expect(Spectre::Http.response.code).to eq 200
 
     Spectre::Http.https 'example' do
-      path 'some-resource'
+      with another_param: 'another-value'
     end
 
     expect(Spectre::Http.response.code).to eq 200
@@ -112,5 +115,8 @@ RSpec.describe 'HTTP' do
     expect(lines[7]).to eq("{\n")
     expect(lines[8]).to eq("  \"result\": \"Hello RSpec!\"\n")
     expect(lines[9]).to eq("}\n")
+    expect(lines[10]).to include('POST https://some-rest-api.io/' \
+                                 'route-value/another-value/some-resource' \
+                                 '?key1=value1&key2=value2')
   end
 end

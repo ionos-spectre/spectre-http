@@ -16,8 +16,9 @@ module Spectre
       'scheme' => 'http',
       'use_ssl' => false,
       'cert' => nil,
-      'headers' => nil,
-      'query' => nil,
+      'headers' => [],
+      'query' => [],
+      'params' => [],
       'content_type' => nil,
       'timeout' => 180,
       'retries' => 0,
@@ -64,13 +65,20 @@ module Spectre
       end
 
       def header name, value
-        @__req['headers'] ||= []
-        @__req['headers'].append [name, value.to_s.strip]
+        @__req['headers'].append [name.to_sym, value.to_s.strip]
       end
 
-      def param name, value
-        @__req['query'] ||= []
-        @__req['query'].append [name, value.to_s.strip]
+      def query name = nil, value = nil, **kwargs
+        @__req['query'].append [name, value.to_s.strip] unless name.nil?
+        @__req['query'] += kwargs.map { |key, val| [key.to_s, val] } if kwargs.any?
+      end
+
+      # This alias is deprecated and should not be used anymore
+      # in favor on +query+ as it conflicts with the route +params+ property
+      alias param query
+
+      def with **params
+        @__req['params'].merge! params
       end
 
       def content_type media_type
@@ -270,6 +278,10 @@ module Spectre
         if req['path']
           base_url += '/' unless base_url.end_with? '/'
           base_url += req['path']
+
+          req['params'].each do |key, val|
+            base_url.gsub! "{#{key}}", val
+          end
         end
 
         uri = URI(base_url)
