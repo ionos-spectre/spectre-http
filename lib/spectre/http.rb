@@ -48,6 +48,11 @@ module Spectre
         @__req['path'] = url_path
       end
 
+      def basic_auth username, password
+        @__req['username'] = username
+        @__req['password'] = password
+      end
+
       def timeout seconds
         @__req['timeout'] = seconds
       end
@@ -297,6 +302,7 @@ module Spectre
         net_req = Net::HTTPGenericRequest.new(req['method'], true, true, uri)
         net_req.body = req['body']
         net_req.content_type = req['content_type'] if req['content_type'] and !req['content_type'].empty?
+        net_req.basic_auth(req['username'], req['password']) if req.key? 'username'
 
         req['headers']&.each do |header|
           net_req[header[0]] = header[1]
