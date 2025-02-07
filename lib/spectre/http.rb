@@ -1,6 +1,7 @@
 require 'net/http'
 require 'openssl'
 require 'json'
+require 'yaml'
 require 'securerandom'
 require 'logger'
 require 'ostruct'
@@ -18,7 +19,7 @@ module Spectre
       'cert' => nil,
       'headers' => [],
       'query' => [],
-      'params' => [],
+      'params' => {},
       'content_type' => nil,
       'timeout' => 180,
       'retries' => 0,
@@ -37,6 +38,10 @@ module Spectre
 
       def initialize request
         @__req = request
+      end
+
+      def endpoint name
+        @__req['endpoint'] = name
       end
 
       def method method_name
@@ -172,16 +177,18 @@ module Spectre
       end
     end
 
+    PROGNAME = 'spectre/http'
     MODULES = []
     DEFAULT_SECURE_KEYS = ['password', 'pass', 'token', 'secret', 'key', 'auth',
                            'authorization', 'cookie', 'session', 'csrf', 'jwt', 'bearer']
 
     class << self
-      @@config = defined?(Spectre::CONFIG) ? Spectre::CONFIG['http'] || {} : {}
+      @@config = defined?(Spectre) ? Spectre::CONFIG['http'] || {} : {}
+      @@openapi_cache = {}
 
       def logger
-        @@logger ||= if defined?(Spectre::Logger)
-                       Spectre::Logger.new(Spectre::CONFIG, progname: 'spectre/http')
+        @@logger ||= if defined?(Spectre)
+                       Spectre.logger
                      else
                        Logger.new($stdout, progname: 'spectre/http')
                      end
@@ -192,7 +199,7 @@ module Spectre
       end
 
       def http(name, secure: false, &)
-        req = DEFAULT_HTTP_CONFIG.clone
+        req = Marshal.load(Marshal.dump(DEFAULT_HTTP_CONFIG))
 
         if @@config.key? name
           deep_merge(req, Marshal.load(Marshal.dump(@@config[name])))
@@ -213,7 +220,7 @@ module Spectre
       end
 
       def request
-        req = Thread.current.thread_variable_get('request')
+        req = Thread.current.thread_variable_get(:request)
 
         raise 'No request has been invoked yet' unless req
 
@@ -221,7 +228,7 @@ module Spectre
       end
 
       def response
-        res = Thread.current.thread_variable_get('response')
+        res = Thread.current.thread_variable_get(:response)
 
         raise 'No response has been received yet' unless res
 
@@ -265,8 +272,30 @@ module Spectre
         s
       end
 
+      def load_openapi path
+        return @@openapi_cache[path] if @@openapi_cache.key? path
+
+        content = if path.match 'http[s]?://'
+                    Net::HTTP.get URI(path)
+                  else
+                    File.read(path)
+                  end
+
+        openapi = YAML.safe_load(content)
+
+        endpoints = {}
+
+        openapi['paths'].each do |uri_path, path_config|
+          path_config.each do |method, endpoint|
+            endpoints[endpoint['operationId']] = [method.upcase, uri_path]
+          end
+        end
+
+        @@openapi_cache[path] = endpoints
+      end
+
       def invoke req
-        Thread.current.thread_variable_set('request', nil)
+        Thread.current.thread_variable_set(:request, nil)
 
         # Build URI
 
@@ -275,12 +304,22 @@ module Spectre
 
         base_url = "#{scheme}://#{base_url}" unless base_url.match %r{http(?:s)?://}
 
-        if req['path']
+        method, path = if req.key? 'endpoint'
+                         raise 'no openapi option set' unless req.key? 'openapi'
+
+                         endpoints = load_openapi(req['openapi'])
+                         endpoints[req['endpoint']] or raise 'endpoint not found'
+                       else
+                         [req['method'] || 'GET', req['path']]
+                       end
+
+        if path
           base_url += '/' unless base_url.end_with? '/'
-          base_url += req['path']
+          path = path[1..] if path.start_with? '/'
+          base_url += path
 
           req['params'].each do |key, val|
-            base_url.gsub! "{#{key}}", val
+            base_url.gsub! "{#{key}}", val.to_s
           end
         end
 
@@ -313,7 +352,7 @@ module Spectre
 
         # Create HTTP Request
 
-        net_req = Net::HTTPGenericRequest.new(req['method'], true, true, uri)
+        net_req = Net::HTTPGenericRequest.new(method, true, true, uri)
         net_req.body = req['body']
         net_req.content_type = req['content_type'] if req['content_type'] and !req['content_type'].empty?
         net_req.basic_auth(req['username'], req['password']) if req.key? 'username'
@@ -332,14 +371,14 @@ module Spectre
 
         # Log request
 
-        req_log = "[>] #{req_id} #{req['method']} #{uri}\n"
+        req_log = "[>] #{req_id} #{method} #{uri}\n"
         req_log += header_to_s(net_req)
 
         unless req['body'].nil? or req['body'].empty?
           req_log += req['no_log'] ? '[...]' : try_format_json(req['body'], pretty: true)
         end
 
-        logger.info(req_log)
+        logger.log(Logger::Severity::INFO, req_log, PROGNAME)
 
         # Request
 
@@ -348,7 +387,7 @@ module Spectre
         begin
           net_res = net_http.request(net_req)
         rescue SocketError => e
-          raise SpectreHttpError, "The request '#{req['method']} #{uri}' failed: #{e.message}\n" \
+          raise SpectreHttpError, "The request '#{method} #{uri}' failed: #{e.message}\n" \
                                   "Please check if the given URL '#{uri}' is valid " \
                                   'and available or a corresponding HTTP config in ' \
                                   'the environment file exists. See log for more details. '
@@ -376,14 +415,14 @@ module Spectre
           res_log += req['no_log'] ? '[...]' : try_format_json(net_res.body, pretty: true)
         end
 
-        logger.info(res_log)
+        logger.log(Logger::Severity::INFO, res_log, PROGNAME)
 
         if req['ensure_success'] and net_res.code.to_i >= 400
           raise "Response code of #{req_id} did not indicate success: #{net_res.code} #{net_res.message}"
         end
 
-        Thread.current.thread_variable_set('request', OpenStruct.new(req).freeze)
-        Thread.current.thread_variable_set('response', SpectreHttpResponse.new(net_res).freeze)
+        Thread.current.thread_variable_set(:request, OpenStruct.new(req).freeze)
+        Thread.current.thread_variable_set(:response, SpectreHttpResponse.new(net_res).freeze)
       end
     end
   end

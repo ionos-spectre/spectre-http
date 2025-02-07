@@ -25,13 +25,16 @@ module Spectre
           ['key2', 'value2']
         ],
       },
+      'some-api' => {
+        'base_url' => 'https://petstore3.swagger.io/api/v3/',
+        # 'openapi' => 'https://petstore3.swagger.io/api/v3/openapi.json',
+        'openapi' => File.join(File.dirname(__FILE__), 'openapi.json'),
+      }
     },
   }
 
-  class Logger < ::Logger
-    def initialize(config, **)
-      super(config['log_file'], **)
-    end
+  def self.logger
+    ::Logger.new(CONFIG['log_file'])
   end
 end
 
@@ -118,5 +121,26 @@ RSpec.describe 'HTTP' do
     expect(lines[10]).to include('POST https://some-rest-api.io/' \
                                  'route-value/another-value/some-resource' \
                                  '?key1=value1&key2=value2')
+  end
+
+  it 'uses openapi endpoints' do
+    net_http = spy(Net::HTTP)
+    net_res = spy(Net::HTTPOK)
+    allow(net_http).to receive(:request).and_return(net_res)
+
+    allow(Net::HTTP).to receive(:new).and_return(net_http)
+
+    net_req = spy(Net::HTTPGenericRequest)
+
+    allow(Net::HTTPGenericRequest)
+      .to receive(:new)
+      .with('GET', true, true, URI('https://petstore3.swagger.io/api/v3/pet/42'))
+      .and_return(net_req)
+
+    Spectre::Http.https 'some-api' do
+      url 'petstore3.swagger.io/api/v3/'
+      endpoint 'getPetById'
+      with petId: 42
+    end
   end
 end
