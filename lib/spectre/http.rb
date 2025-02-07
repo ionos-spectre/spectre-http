@@ -265,7 +265,7 @@ module Spectre
         scheme = req['use_ssl'] ? 'https' : 'http'
         base_url = req['base_url']
 
-        base_url = scheme + '://' + base_url unless base_url.match %r{http(?:s)?://}
+        base_url = "#{scheme}://#{base_url}" unless base_url.match %r{http(?:s)?://}
 
         if req['path']
           base_url += '/' unless base_url.end_with? '/'
