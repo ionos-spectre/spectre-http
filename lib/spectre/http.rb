@@ -312,7 +312,10 @@ module Spectre
         if req.key? 'endpoint'
           load_openapi(req) if req.key? 'openapi'
 
+          raise 'no endpoints configured' unless req.key? 'endpoints'
+
           endpoint = req['endpoints'][req['endpoint']] or raise 'endpoint not found'
+          endpoint = Marshal.load(Marshal.dump(endpoint))
 
           req.merge! endpoint
         end
