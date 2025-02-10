@@ -244,19 +244,19 @@ module Spectre
         first.merge!(second, &merger)
       end
 
-      def try_format_json str, pretty: false
-        return str unless str or str.empty?
+      def try_format_json json, pretty: false
+        return json unless json or json.empty?
 
-        begin
-          json = JSON.parse(str)
-          json.obfuscate!(DEFAULT_SECURE_KEYS) unless @debug
-
-          str = pretty ? JSON.pretty_generate(json) : JSON.dump(json)
-        rescue StandardError
-          # do nothing
+        if json.is_a? String
+          begin
+            json = JSON.parse(json)
+          rescue StandardError
+            # do nothing
+          end
         end
 
-        str
+        json.obfuscate!(DEFAULT_SECURE_KEYS) unless @debug
+        pretty ? JSON.pretty_generate(json) : JSON.dump(json)
       end
 
       def secure? key
@@ -272,7 +272,9 @@ module Spectre
         s
       end
 
-      def load_openapi path
+      def load_openapi config
+        path = config['openapi']
+
         return @@openapi_cache[path] if @@openapi_cache.key? path
 
         content = if path.match 'http[s]?://'
@@ -283,15 +285,18 @@ module Spectre
 
         openapi = YAML.safe_load(content)
 
-        endpoints = {}
+        config['endpoints'] = {}
 
         openapi['paths'].each do |uri_path, path_config|
           path_config.each do |method, endpoint|
-            endpoints[endpoint['operationId']] = [method.upcase, uri_path]
+            config['endpoints'][endpoint['operationId']] = {
+              'method' => method.upcase,
+              'path' => uri_path,
+            }
           end
         end
 
-        @@openapi_cache[path] = endpoints
+        @@openapi_cache[path] = config['endpoints']
       end
 
       def invoke req
@@ -304,14 +309,16 @@ module Spectre
 
         base_url = "#{scheme}://#{base_url}" unless base_url.match %r{http(?:s)?://}
 
-        method, path = if req.key? 'endpoint'
-                         raise 'no openapi option set' unless req.key? 'openapi'
+        if req.key? 'endpoint'
+          load_openapi(req) if req.key? 'openapi'
 
-                         endpoints = load_openapi(req['openapi'])
-                         endpoints[req['endpoint']] or raise 'endpoint not found'
-                       else
-                         [req['method'] || 'GET', req['path']]
-                       end
+          endpoint = req['endpoints'][req['endpoint']] or raise 'endpoint not found'
+
+          req.merge! endpoint
+        end
+
+        method = req['method'] || 'GET'
+        path = req['path']
 
         if path
           base_url += '/' unless base_url.end_with? '/'
@@ -353,7 +360,9 @@ module Spectre
         # Create HTTP Request
 
         net_req = Net::HTTPGenericRequest.new(method, true, true, uri)
-        net_req.body = req['body']
+        body = req['body']
+        body = JSON.dump(body) if body.is_a? Hash
+        net_req.body = body
         net_req.content_type = req['content_type'] if req['content_type'] and !req['content_type'].empty?
         net_req.basic_auth(req['username'], req['password']) if req.key? 'username'
 

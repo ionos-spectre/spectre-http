@@ -24,6 +24,15 @@ module Spectre
           ['key1', 'value1'],
           ['key2', 'value2']
         ],
+        'endpoints' => {
+          'someCustomEndpoint' => {
+            'method' => 'PUT',
+            'path' => 'some-custom-path',
+            'body' => {
+              'foo' => 'bar',
+            }
+          },
+        },
       },
       'some-api' => {
         'base_url' => 'https://petstore3.swagger.io/api/v3/',
@@ -142,5 +151,26 @@ RSpec.describe 'HTTP' do
       endpoint 'getPetById'
       with petId: 42
     end
+  end
+
+  it 'uses custom configured endpoints' do
+    net_http = spy(Net::HTTP)
+    net_res = spy(Net::HTTPOK)
+    allow(net_http).to receive(:request).and_return(net_res)
+
+    allow(Net::HTTP).to receive(:new).and_return(net_http)
+
+    net_req = spy(Net::HTTPGenericRequest)
+
+    allow(Net::HTTPGenericRequest)
+      .to receive(:new)
+      .with('PUT', true, true, URI('https://some-rest-api.io/some-custom-path?key1=value1&key2=value2'))
+      .and_return(net_req)
+
+    Spectre::Http.https 'example' do
+      endpoint 'someCustomEndpoint'
+    end
+
+    expect(net_req).to have_received(:body=).with('{"foo":"bar"}')
   end
 end
