@@ -48,6 +48,13 @@ module Spectre
         @__req['method'] = method_name.upcase
       end
 
+      [:get, :post, :put, :patch, :delete].each do |method|
+        define_method(method) do |url_path|
+          @__req['method'] = method.to_s.upcase
+          @__req['path'] = url_path
+        end
+      end
+
       def url base_url
         @__req['base_url'] = base_url
       end
