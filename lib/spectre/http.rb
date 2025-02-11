@@ -64,8 +64,10 @@ module Spectre
       end
 
       def basic_auth username, password
-        @__req['username'] = username
-        @__req['password'] = password
+        @__req['basic_auth'] = {
+          'username' => username,
+          'password' => password,
+        }
       end
 
       def timeout seconds
@@ -374,7 +376,7 @@ module Spectre
         body = JSON.dump(body) if body.is_a? Hash
         net_req.body = body
         net_req.content_type = req['content_type'] if req['content_type'] and !req['content_type'].empty?
-        net_req.basic_auth(req['username'], req['password']) if req.key? 'username'
+        net_req.basic_auth(req['basic_auth']['username'], req['basic_auth']['password']) if req.key? 'basic_auth'
 
         req['headers']&.each do |header|
           net_req[header[0]] = header[1]

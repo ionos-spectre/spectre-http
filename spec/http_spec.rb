@@ -11,6 +11,10 @@ module Spectre
         'method' => 'POST',
         'path' => '{some_route_param}/{another_param}/some-resource',
         'auth' => 'basic_auth',
+        'basic_auth' => {
+          'username' => 'some-user',
+          'password' => 'some-password',
+        },
         'timeout' => 100,
         'retries' => 3,
         'content_type' => 'application/json',
@@ -70,7 +74,7 @@ RSpec.describe 'HTTP' do
 
     net_req = double(Net::HTTPGenericRequest)
     allow(net_req).to receive(:body=)
-    allow(net_req).to receive(:basic_auth)
+    allow(net_req).to receive(:basic_auth).with('some-user', 'some-password')
     allow(net_req).to receive(:each_header).and_return([['header1', 'value1']])
     allow(net_req).to receive(:[]=)
     allow(net_req).to receive(:content_type=)
