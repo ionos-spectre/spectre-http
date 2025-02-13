@@ -191,16 +191,12 @@ module Spectre
     DEFAULT_SECURE_KEYS = ['password', 'pass', 'token', 'secret', 'key', 'auth',
                            'authorization', 'cookie', 'session', 'csrf', 'jwt', 'bearer']
 
-    class << self
-      @@config = defined?(Spectre) ? Spectre::CONFIG['http'] || {} : {}
-      @@openapi_cache = {}
-
-      def logger
-        @@logger ||= if defined?(Spectre)
-                       Spectre.logger
-                     else
-                       Logger.new($stdout, progname: 'spectre/http')
-                     end
+    class Client
+      def initialize config, logger
+        @config = config['http']
+        @logger = logger
+        @debug = config['debug'] || false
+        @openapi_cache = {}
       end
 
       def https(name, &)
@@ -210,8 +206,8 @@ module Spectre
       def http(name, secure: false, &)
         req = Marshal.load(Marshal.dump(DEFAULT_HTTP_CONFIG))
 
-        if @@config.key? name
-          deep_merge(req, Marshal.load(Marshal.dump(@@config[name])))
+        if @config.key? name
+          deep_merge(req, Marshal.load(Marshal.dump(@config[name])))
 
           unless req['base_url']
             raise SpectreHttpError, "No `base_url' set for HTTP client '#{name}'. " \
@@ -284,7 +280,7 @@ module Spectre
       def load_openapi config
         path = config['openapi']
 
-        return @@openapi_cache[path] if @@openapi_cache.key? path
+        return @openapi_cache[path] if @openapi_cache.key? path
 
         content = if path.match 'http[s]?://'
                     Net::HTTP.get URI(path)
@@ -305,7 +301,7 @@ module Spectre
           end
         end
 
-        @@openapi_cache[path] = config['endpoints']
+        @openapi_cache[path] = config['endpoints']
       end
 
       def invoke req
@@ -399,7 +395,7 @@ module Spectre
           req_log += req['no_log'] ? '[...]' : try_format_json(req['body'], pretty: true)
         end
 
-        logger.log(Logger::Severity::INFO, req_log, PROGNAME)
+        @logger.log(Logger::Severity::INFO, req_log, PROGNAME)
 
         # Request
 
@@ -436,7 +432,7 @@ module Spectre
           res_log += req['no_log'] ? '[...]' : try_format_json(net_res.body, pretty: true)
         end
 
-        logger.log(Logger::Severity::INFO, res_log, PROGNAME)
+        @logger.log(Logger::Severity::INFO, res_log, PROGNAME)
 
         if req['ensure_success'] and net_res.code.to_i >= 400
           raise "Response code of #{req_id} did not indicate success: #{net_res.code} #{net_res.message}"
@@ -447,10 +443,6 @@ module Spectre
       end
     end
   end
-end
 
-%i[http https request response].each do |method|
-  Kernel.define_method(method) do |*args, &block|
-    Spectre::Http.send(method, *args, &block)
-  end
+  Engine.register(Http::Client, :http, :https, :request, :response) if defined? Engine
 end

@@ -1,57 +1,50 @@
 require 'stringio'
 require 'logger'
 
-# Mock the Spectre modules
-module Spectre
-  CONFIG = {
-    'log_file' => StringIO.new,
-    'http' => {
-      'example' => {
-        'base_url' => 'some-rest-api.io',
-        'method' => 'POST',
-        'path' => '{some_route_param}/{another_param}/some-resource',
-        'auth' => 'basic_auth',
-        'basic_auth' => {
-          'username' => 'some-user',
-          'password' => 'some-password',
-        },
-        'timeout' => 100,
-        'retries' => 3,
-        'content_type' => 'application/json',
-        'params' => {
-          'some_route_param' => 'route-value',
-        },
-        'headers' => [
-          ['header1', 'value1']
-        ],
-        'query' => [
-          ['key1', 'value1'],
-          ['key2', 'value2']
-        ],
-        'endpoints' => {
-          'someCustomEndpoint' => {
-            'method' => 'PUT',
-            'path' => 'some-custom-path',
-            'body' => {
-              'foo' => 'bar',
-            }
-          },
+require_relative '../lib/spectre/http'
+
+CONFIG = {
+  'log_file' => StringIO.new,
+  'http' => {
+    'example' => {
+      'base_url' => 'some-rest-api.io',
+      'method' => 'POST',
+      'path' => '{some_route_param}/{another_param}/some-resource',
+      'auth' => 'basic_auth',
+      'basic_auth' => {
+        'username' => 'some-user',
+        'password' => 'some-password',
+      },
+      'timeout' => 100,
+      'retries' => 3,
+      'content_type' => 'application/json',
+      'params' => {
+        'some_route_param' => 'route-value',
+      },
+      'headers' => [
+        ['header1', 'value1']
+      ],
+      'query' => [
+        ['key1', 'value1'],
+        ['key2', 'value2']
+      ],
+      'endpoints' => {
+        'someCustomEndpoint' => {
+          'method' => 'PUT',
+          'path' => 'some-custom-path',
+          'body' => {
+            'foo' => 'bar',
+          }
         },
       },
-      'some-api' => {
-        'base_url' => 'https://petstore3.swagger.io/api/v3/',
-        # 'openapi' => 'https://petstore3.swagger.io/api/v3/openapi.json',
-        'openapi' => File.join(File.dirname(__FILE__), 'openapi.json'),
-      }
     },
-  }
-
-  def self.logger
-    ::Logger.new(CONFIG['log_file'])
-  end
-end
-
-require_relative '../lib/spectre/http'
+    'some-api' => {
+      'base_url' => 'https://petstore3.swagger.io/api/v3/',
+      # 'openapi' => 'https://petstore3.swagger.io/api/v3/openapi.json',
+      'openapi' => File.join(File.dirname(__FILE__), 'openapi.json'),
+    }
+  },
+}
 
 RSpec.describe 'HTTP' do
   it 'should do some request' do
@@ -88,7 +81,11 @@ RSpec.describe 'HTTP' do
     expect(net_http).to receive(:max_retries=).with(3)
     expect(net_http).to receive(:request).with(net_req)
 
-    Spectre::Http.https 'some-rest-api.io' do
+    log_file = StringIO.new
+
+    client = Spectre::Http::Client.new(CONFIG, Logger.new(log_file))
+
+    client.https 'some-rest-api.io' do
       method 'POST'
       path 'some-resource'
       auth 'basic_auth'
@@ -108,17 +105,16 @@ RSpec.describe 'HTTP' do
       # no_log!                      # don't log request bodies
     end
 
-    expect(Spectre::Http.response.code).to eq 200
+    expect(client.response.code).to eq 200
 
-    Spectre::Http.https 'example' do
+    client.https 'example' do
       with another_param: 'another-value'
     end
 
-    expect(Spectre::Http.response.code).to eq 200
+    expect(client.response.code).to eq 200
 
-    log = Spectre::CONFIG['log_file']
-    log.rewind
-    lines = log.readlines
+    log_file.rewind
+    lines = log_file.readlines
 
     expect(lines[0]).to match('I, \[.*\]  INFO -- spectre/http: \[>\] [a-z0-9]{6} POST ')
     expect(lines[0]).to include('https://some-rest-api.io/some-resource?key1=value1&key2=value2')
@@ -150,9 +146,11 @@ RSpec.describe 'HTTP' do
       .with('PUT', true, true, URI('https://some-rest-api.io/some-custom-path?key1=value1&key2=value2'))
       .and_return(net_req)
 
-    Spectre::Http.https 'example' do
-      put 'some-custom-path'
-    end
+    Spectre::Http::Client
+      .new(CONFIG, Logger.new(StringIO.new))
+      .https 'example' do
+        put 'some-custom-path'
+      end
   end
 
   it 'uses openapi endpoints' do
@@ -169,11 +167,13 @@ RSpec.describe 'HTTP' do
       .with('GET', true, true, URI('https://petstore3.swagger.io/api/v3/pet/42'))
       .and_return(net_req)
 
-    Spectre::Http.https 'some-api' do
-      url 'petstore3.swagger.io/api/v3/'
-      endpoint 'getPetById'
-      with petId: 42
-    end
+    Spectre::Http::Client
+      .new(CONFIG, Logger.new(StringIO.new))
+      .https 'some-api' do
+        url 'petstore3.swagger.io/api/v3/'
+        endpoint 'getPetById'
+        with petId: 42
+      end
   end
 
   it 'uses custom configured endpoints' do
@@ -190,9 +190,11 @@ RSpec.describe 'HTTP' do
       .with('PUT', true, true, URI('https://some-rest-api.io/some-custom-path?key1=value1&key2=value2'))
       .and_return(net_req)
 
-    Spectre::Http.https 'example' do
-      endpoint 'someCustomEndpoint'
-    end
+    Spectre::Http::Client
+      .new(CONFIG, Logger.new(StringIO.new))
+      .https 'example' do
+        endpoint 'someCustomEndpoint'
+      end
 
     expect(net_req).to have_received(:body=).with('{"foo":"bar"}')
   end
