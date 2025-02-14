@@ -1,11 +1,32 @@
 require 'net/http'
 require 'openssl'
 require 'json'
+require 'jsonpath'
 require 'yaml'
 require 'securerandom'
 require 'logger'
 require 'ostruct'
 require 'ectoplasm'
+
+class ::String
+  def pick path
+    raise ArgumentError, "`path' must not be nil or empty" if path.nil? or path.empty?
+
+    begin
+      JsonPath.on(self, path)
+    rescue MultiJson::ParseError
+      # do nothing and return nil
+    end
+  end
+end
+
+class ::OpenStruct
+  def pick path
+    raise ArgumentError, "`path' must not be nil or empty" if path.nil? or path.empty?
+
+    JsonPath.on(self, path)
+  end
+end
 
 module Spectre
   module Http
