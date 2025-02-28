@@ -365,7 +365,7 @@ module Spectre
 
         # Build query parameters
 
-        uri.query = URI.encode_www_form(req['query']) unless !(req['query']) or req['query'].empty?
+        uri.query = URI.encode_www_form(req['query']) unless !req['query'] or req['query'].empty?
 
         # Create HTTP client
 
