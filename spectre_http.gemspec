@@ -15,6 +15,7 @@ Gem::Specification.new do |spec|
   spec.metadata['homepage_uri']    = spec.homepage
   spec.metadata['source_code_uri'] = 'https://github.com/ionos-spectre/spectre-http'
   spec.metadata['changelog_uri']   = 'https://github.com/ionos-spectre/spectre-http/blob/master/CHANGELOG.md'
+  spec.metadata['allowed_push_host'] = 'https://rubygems.pkg.github.com/ionos-spectre'
 
   spec.files = Dir['lib/**/*']
   spec.require_paths = ['lib']
