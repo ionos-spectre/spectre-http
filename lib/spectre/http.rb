@@ -89,6 +89,8 @@ module Spectre
           'username' => username,
           'password' => password,
         }
+
+        @__req['auth'] = 'basic_auth'
       end
 
       def timeout seconds
