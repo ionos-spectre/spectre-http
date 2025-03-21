@@ -9,4 +9,4 @@ on:
 
 jobs:
   build:
-    uses: ionos-spectre/spectre-core/.github/workflows/build.yml
+    uses: ionos-spectre/spectre-core/.github/workflows/build.yml@main

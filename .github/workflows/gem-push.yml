@@ -7,4 +7,4 @@ on:
 
 jobs:
   push:
-    uses: ionos-spectre/spectre-core/.github/workflows/gem-push.yml
+    uses: ionos-spectre/spectre-core/.github/workflows/gem-push.yml@main
