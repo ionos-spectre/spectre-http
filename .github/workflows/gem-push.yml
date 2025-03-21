@@ -3,7 +3,7 @@ name: Gem Push
 on:
   push:
     tags:
-      - '*.*.*'
+      - 'v*.*.*'
 
 jobs:
   push:
