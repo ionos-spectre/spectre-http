@@ -397,7 +397,7 @@ module Spectre
         net_req.content_type = req['content_type'] if req['content_type'] and !req['content_type'].empty?
 
         if req.key? 'basic_auth' and req['auth'] == 'basic_auth'
-          net_req.basic_auth(req['basic_auth']['username'], req['basic_auth']['password']) 
+          net_req.basic_auth(req['basic_auth']['username'], req['basic_auth']['password'])
         end
 
         req['headers']&.each do |header|
