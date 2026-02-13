@@ -12,6 +12,26 @@ This is a [spectre](https://github.com/ionos-spectre/spectre-core) module which 
 $ sudo gem install spectre-http
 ```
 
+When using spectre add the gem to your `Gemfile`
+
+```ruby
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+gemspec
+
+# [...]
+gem 'spectre-http'
+```
+
+and add to your `spectre.yml`:
+
+```yaml
+modules:
+  - spectre-http
+```
+
 
 ## Usage
 
