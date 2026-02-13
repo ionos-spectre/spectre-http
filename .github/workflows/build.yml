@@ -4,29 +4,9 @@ on:
   push:
     branches:
       - main
-
-permissions:
-  contents: read
+    paths:
+    - 'lib/**.rb'
 
 jobs:
   build:
-    name: Test and Build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Setup Ruby
-      uses: ruby/setup-ruby@v1
-      with:
-        ruby-version: '3.4'
-        bundler-cache: true
-
-    - name: Check code style
-      run: bundle exec rubocop
-
-    - name: Run tests
-      run: bundle exec rspec
-
-    - name: Build GEM
-      run: bundle exec gem build
+    uses: ionos-spectre/spectre-core/.github/workflows/build.yml@main
