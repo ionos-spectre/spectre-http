@@ -276,7 +276,7 @@ module Spectre
         if json.is_a? String
           begin
             json = JSON.parse(json)
-          rescue StandardError
+          rescue
             # do nothing
           end
         end
